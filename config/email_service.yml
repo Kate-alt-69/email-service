@@ -1,0 +1,199 @@
+# Email Service Configuration
+# Auto-generated during build - customize as needed
+
+metadata:
+  service_name: "email-service"
+  version: "1.1.0"
+  type: "email-api"
+  description: "Email sending and receiving service with SMTP gateway"
+
+# =======================================
+# API SERVER CONFIGURATION
+# =======================================
+api:
+  port: 3430
+  host: "0.0.0.0"
+  env: "production"
+  
+  # HTTPS/TLS Security
+  tls:
+    enabled: false
+    port: 3443
+    cert_path: "./config/certs/server.crt"
+    key_path: "./config/certs/server.key"
+    min_version: "TLSv1.2"
+
+# =======================================
+# EMAIL BRANDING & DOMAIN CONFIGURATION
+# =======================================
+branding:
+  company_name: "Your Company"
+  company_tagline: "Professional Email Service"
+  company_website: "https://httpsbuffcowland.in"
+  logo_path: "./config/assets/logo.png"
+  
+  # Brand Colors (hex format)
+  colors:
+    primary: "#007bff"
+    accent: "#0056b3"
+
+# =======================================
+# CUSTOM DOMAIN CONFIGURATION
+# =======================================
+domain:
+  custom_domain: "httpsbuffcowland.in"
+  sender_email: "noreply@httpsbuffcowland.in"
+  
+  # DKIM Configuration (optional)
+  dkim:
+    enabled: false
+    selector: "mail"
+    private_key_path: "./config/certs/dkim.private.key"
+
+# =======================================
+# OUTGOING MAIL (SMTP Relay)
+# =======================================
+outgoing:
+  smtp:
+    # Target SMTP server (Gmail, Outlook, SendGrid, Postfix, etc)
+    host: "smtp.gmail.com"
+    port: 587
+    secure: false              # Use STARTTLS (port 587) or direct SSL (port 465)
+    
+    # Authentication (if required)
+    auth:
+      enabled: true
+      username: "your-email@gmail.com"
+      password: "your-app-password"  # Use app-specific password for Gmail
+    
+    # Connection options
+    ignore_tls: false
+    timeout: 10000            # milliseconds
+
+# =======================================
+# INCOMING MAIL (SMTP SERVER on Port 25)
+# =======================================
+incoming:
+  smtp_server:
+    port: 3425
+    host: "0.0.0.0"
+    
+    # Authentication for receiving emails
+    auth:
+      enabled: false
+      username: "relay-user"
+      password: "relay-password"
+    
+    # Whitelist domains that can send to this server
+    whitelist_domains:
+      - "httpsbuffcowland.in"
+      - "trusted.com"
+
+# =======================================
+# DATABASE CONFIGURATION
+# =======================================
+database:
+  engine: "postgresql"
+  host: "localhost"
+  port: 5432
+  username: "postgres"
+  password: "postgres"
+  database: "email_service"
+  
+  # Connection pooling
+  pool:
+    min: 2
+    max: 10
+    idle_timeout: 10000
+
+# =======================================
+# SERVICE COMMUNICATION (Bootstrap)
+# =======================================
+service_communication:
+  enabled: true
+  bootstrap_manager_url: "http://localhost:9000"
+  service_name: "email-service"
+  protocol_version: "1.0.0"
+  
+  # Health check
+  health_check:
+    interval: 30000          # milliseconds
+    timeout: 5000
+
+# =======================================
+# EMAIL STORAGE & RETENTION
+# =======================================
+storage:
+  # Delete old emails after N days
+  retention_days: 90
+  
+  # Redis/Cache (optional - for queues)
+  redis:
+    enabled: false
+    host: "localhost"
+    port: 6379
+    password: ""
+
+# =======================================
+# LOGGING & MONITORING
+# =======================================
+logging:
+  level: "info"              # debug, info, warn, error
+  format: "pretty"           # pretty, json
+  
+  # Log files
+  files:
+    enabled: false
+    directory: "./logs"
+    max_size: "10mb"
+    max_files: 5
+
+# =======================================
+# SECURITY SETTINGS
+# =======================================
+security:
+  # Rate limiting
+  rate_limit:
+    enabled: true
+    max_requests: 100
+    window_ms: 60000          # 1 minute
+  
+  # CORS configuration
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"
+      - "https://httpsbuffcowland.in"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+  
+  # API Key authentication (optional)
+  api_key:
+    enabled: false
+    keys: []
+
+# =======================================
+# DEPENDENCIES PATHS
+# =======================================
+paths:
+  # Relative to binary location
+  config_dir: "./config"
+  dependencies_dir: "./dep"
+  assets_dir: "./config/assets"
+  certs_dir: "./config/certs"
+  logs_dir: "./logs"
+
+# =======================================
+# DEPENDENCIES CONFIGURATION
+# =======================================
+dependencies:
+  # SMTP Server (email-smtp binary)
+  smtp_server:
+    enabled: true
+    binary_name: "email-smtp"
+    port: 3425
+    # Auto-resolve platform: windows/darwin/linux
+    auto_select_platform: true

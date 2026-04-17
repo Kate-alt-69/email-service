@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # Postfix SMTP Service
+  postfix:
+    image: boky/postfix:latest
+    container_name: email-service-postfix
+    hostname: postfix
+    environment:
+      # Postfix Configuration
+      POSTFIX_hostname: localhost.localdomain
+      POSTFIX_inet_interfaces: 0.0.0.0
+      POSTFIX_default_transport: error
+      POSTFIX_relay_host: ""
+      
+      # Allow relaying from localhost
+      ALLOW_EMPTY_PLAINTEXT_AUTH: "false"
+      DISABLE_PLAINTEXT_AUTH: "false"
+      
+      # Optional: For Gmail relay (if needed later)
+      # RELAYHOST: [smtp.gmail.com]:587
+      # SMTP_USERNAME: your-email@gmail.com
+      # SMTP_PASSWORD: your-app-password
+    ports:
+      - "25:25"
+      - "587:587"
+    networks:
+      - email-network
+    healthcheck:
+      test: ["CMD", "postfix", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postfix-data:/var/spool/postfix
+      - postfix-etc:/etc/postfix
+    restart: unless-stopped
+
+  # Redis Service (for queue system - optional)
+  redis:
+    image: redis:7-alpine
+    container_name: email-service-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - email-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+networks:
+  email-network:
+    driver: bridge
+
+volumes:
+  postfix-data:
+    driver: local
+  postfix-etc:
+    driver: local
+  redis-data:
+    driver: local

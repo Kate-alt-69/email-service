@@ -1,0 +1,23 @@
+{
+  "services": [
+    {
+      "name": "email-sender",
+      "enabled": true,
+      "command": "node",
+      "args": ["build/index.js"],
+      "directory": "node/email-sender",
+      "autoRestart": true,
+      "maxRetries": 5,
+      "retryDelay": "5s",
+      "description": "Email sending service with Nodemailer"
+    }
+  ],
+  "logging": {
+    "level": "info",
+    "format": "text"
+  },
+  "shutdown": {
+    "gracefulTimeout": "10s",
+    "forceKillTimeout": "5s"
+  }
+}

@@ -1,0 +1,56 @@
+# Bootstrap Manager Configuration for Email Service
+# This file defines email-service and email-smtp for bootstrap-manager
+
+bootstrap_manager:
+  secret_file: ./.container-secret
+  log_level: info
+  auto_restart: true
+  shutdown_timeout_ms: 15000
+
+services:
+  # Email SMTP Server - Listens for incoming SMTP connections
+  - name: email-smtp
+    binary: ./dist/email-smtp.bat
+    enabled: true
+    args: []
+    dir: .
+    restart_on_crash: true
+    max_restarts: 5
+    restart_delay_ms: 5000
+    env:
+      NODE_ENV: production
+      PORT: "25"
+      SMTP_HOST: localhost
+      SMTP_PORT: "25"
+      SMTP_SECURE: "false"
+      SMTP_IGNORE_TLS: "true"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+
+  # Email Sender Service - Sends emails from queue
+  - name: email-service
+    binary: ./dist/email.bat
+    enabled: true
+    args: []
+    dir: .
+    restart_on_crash: true
+    max_restarts: 5
+    restart_delay_ms: 5000
+    env:
+      NODE_ENV: production
+      PORT: "3001"
+      SMTP_HOST: localhost
+      SMTP_PORT: "25"
+      SMTP_SECURE: "false"
+      SMTP_IGNORE_TLS: "true"
+      EMAIL_FROM: "noreply@yourdomain.com"
+      APP_URL: "http://localhost:9090"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      # Queue settings
+      REDIS_URL: "redis://localhost:6379"
+      DB_URL: "postgresql://email:email@localhost:5432/email_db"
+      # Nodemailer settings (can be overridden via env)
+      MAIL_HOST: localhost
+      MAIL_PORT: "25"
+      MAIL_SECURE: "false"
