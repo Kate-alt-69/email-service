@@ -59,7 +59,7 @@ export async function initializeDatabase() {
     const dbClient = await mainPool.connect();
 
     try {
-      // Create emails table
+      // Create emails table with encryption support
       await dbClient.query(`
         CREATE TABLE IF NOT EXISTS emails (
           id UUID PRIMARY KEY,
@@ -75,7 +75,12 @@ export async function initializeDatabase() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           metadata JSONB,
-          error_message TEXT
+          error_message TEXT,
+          is_encrypted BOOLEAN DEFAULT false,
+          encrypted_html_body TEXT,
+          encrypted_text_body TEXT,
+          encrypted_metadata TEXT,
+          encryption_timestamp TIMESTAMP
         );
       `);
 
@@ -87,7 +92,7 @@ export async function initializeDatabase() {
         CREATE INDEX IF NOT EXISTS idx_emails_created_at ON emails(created_at);
       `);
 
-      // Create email attachments table
+      // Create email attachments table with encryption support
       await dbClient.query(`
         CREATE TABLE IF NOT EXISTS email_attachments (
           id UUID PRIMARY KEY,
@@ -96,7 +101,10 @@ export async function initializeDatabase() {
           content_type VARCHAR(100),
           size INTEGER,
           data BYTEA NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          is_encrypted BOOLEAN DEFAULT false,
+          encrypted_data TEXT,
+          encryption_timestamp TIMESTAMP
         );
       `);
 

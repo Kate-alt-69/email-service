@@ -28,6 +28,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@types/axios": "^0.9.36",
+    "axios": "^1.15.2",
     "bull": "^4.11.5",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

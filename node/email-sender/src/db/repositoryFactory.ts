@@ -3,6 +3,7 @@ import { getGlobalLogger } from '../logger';
 import { closeDatabase, getPool, initializeDatabase } from './database';
 import { FileEmailRepository } from './fileEmailRepository';
 import { EmailRepository, EmailRepositoryLike } from './emailRepository';
+import { EncryptedEmailRepository } from './encryptedRepository';
 
 const logger = getGlobalLogger();
 
@@ -38,19 +39,30 @@ export async function createEmailRepository(): Promise<StorageContext> {
   }
 
   const driver = resolveStorageDriver();
+  const enableEncryption = process.env.EMAIL_ENCRYPTION_ENABLED !== 'false';
 
   if (driver === 'postgres') {
     await initializeDatabase();
+    let repository: EmailRepositoryLike = new EmailRepository(getPool());
+    
+    // Wrap with encryption if enabled
+    if (enableEncryption) {
+      repository = new EncryptedEmailRepository(repository, true);
+    }
+
     currentStorage = {
       driver: 'postgres',
-      repository: new EmailRepository(getPool()),
+      repository,
       details: {
         database: process.env.DB_NAME || 'email_service',
         host: process.env.DB_HOST || 'localhost',
         port: parseInt(process.env.DB_PORT || '5432', 10),
       },
     };
-    logger.info('Email storage initialized with PostgreSQL backend', currentStorage.details);
+    logger.info('Email storage initialized with PostgreSQL backend', {
+      ...currentStorage.details,
+      encryption: enableEncryption ? 'enabled' : 'disabled',
+    });
     return currentStorage;
   }
 
@@ -58,7 +70,13 @@ export async function createEmailRepository(): Promise<StorageContext> {
     process.cwd(),
     process.env.EMAIL_DB_PATH || './data/email-service.db'
   );
-  const fileRepository = new FileEmailRepository(dbPath, `${dbPath}.lock`);
+  let fileRepository: EmailRepositoryLike = new FileEmailRepository(dbPath, `${dbPath}.lock`);
+  
+  // Wrap with encryption if enabled
+  if (enableEncryption) {
+    fileRepository = new EncryptedEmailRepository(fileRepository, true);
+  }
+
   currentStorage = {
     driver: 'file',
     repository: fileRepository,
@@ -67,7 +85,10 @@ export async function createEmailRepository(): Promise<StorageContext> {
       lockPath: `${dbPath}.lock`,
     },
   };
-  logger.info('Email storage initialized with file backend', currentStorage.details);
+  logger.info('Email storage initialized with file backend', {
+    ...currentStorage.details,
+    encryption: enableEncryption ? 'enabled' : 'disabled',
+  });
   return currentStorage;
 }
 

@@ -22,6 +22,9 @@ import { handleServiceRequest } from './handlers/serviceComHandler';
 import { createEmailRepository, closeEmailRepository } from './db/repositoryFactory';
 import { EmailRepositoryLike } from './db/emailRepository';
 import { getDefaultFromAddress } from './config/emailDefaults';
+import { getSendPulseClient } from './config/sendpulseClient';
+import { initializeEncryption } from './services/osEncryption';
+import { getAvailableTemplates, loadAndRenderTemplate, TemplateName } from './services/templateEngine';
 import * as net from 'net';
 
 loadServiceEnv();
@@ -123,6 +126,163 @@ app.get('/health', async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(503).json({ status: 'error', error: String(error) });
+  }
+});
+
+/**
+ * SendPulse verification endpoint
+ * Tests the SendPulse API connection and retrieves user info
+ */
+app.get('/api/sendpulse/verify', async (req: Request, res: Response) => {
+  try {
+    const sendPulse = getSendPulseClient();
+    
+    if (!process.env.SENDPULSE_API_KEY || !process.env.SENDPULSE_API_SECRET) {
+      return res.status(400).json({
+        error: 'SendPulse API credentials not configured',
+        message: 'Set SENDPULSE_API_KEY and SENDPULSE_API_SECRET environment variables',
+      });
+    }
+
+    logger.info('🔌 Testing SendPulse connection...');
+    
+    // Test authentication
+    await sendPulse.authenticate();
+    
+    // Get user info
+    const userInfo = await sendPulse.getUserInfo();
+    
+    res.status(200).json({
+      status: 'connected',
+      provider: 'sendpulse',
+      smtp: {
+        host: process.env.SENDPULSE_SMTP_HOST || 'smtp-pulse.com',
+        port: process.env.SENDPULSE_SMTP_PORT || '2525',
+        user: process.env.SENDPULSE_SMTP_USER,
+      },
+      account: userInfo,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('SendPulse verification failed:', error);
+    res.status(503).json({
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/**
+ * Get available domains for sending emails from SendPulse
+ * Returns all domains configured in SendPulse account
+ */
+app.get('/api/sendpulse/domains', async (req: Request, res: Response) => {
+  try {
+    const sendPulse = getSendPulseClient();
+    
+    if (!process.env.SENDPULSE_API_KEY || !process.env.SENDPULSE_API_SECRET) {
+      return res.status(400).json({
+        error: 'SendPulse API credentials not configured',
+        message: 'Set SENDPULSE_API_KEY and SENDPULSE_API_SECRET environment variables',
+      });
+    }
+
+    logger.info('📧 Fetching SendPulse domains...');
+    const domains = await sendPulse.getDomains();
+
+    res.json({
+      provider: 'sendpulse',
+      total: domains.length,
+      domains: domains.map((d) => ({
+        id: d.id,
+        name: d.name,
+        status: d.status,
+        isDefault: d.isDefault,
+        createdAt: d.createdAt,
+      })),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to fetch SendPulse domains:', error);
+    res.status(503).json({
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/**
+ * Get verified domains only (ready for sending)
+ * Returns only verified domains that can be used as sender
+ */
+app.get('/api/sendpulse/domains/verified', async (req: Request, res: Response) => {
+  try {
+    const sendPulse = getSendPulseClient();
+    
+    if (!process.env.SENDPULSE_API_KEY || !process.env.SENDPULSE_API_SECRET) {
+      return res.status(400).json({
+        error: 'SendPulse API credentials not configured',
+        message: 'Set SENDPULSE_API_KEY and SENDPULSE_API_SECRET environment variables',
+      });
+    }
+
+    logger.info('✓ Fetching verified SendPulse domains...');
+    const verifiedDomains = await sendPulse.getVerifiedDomains();
+    const defaultDomain = await sendPulse.getDefaultDomain();
+
+    res.json({
+      provider: 'sendpulse',
+      total: verifiedDomains.length,
+      default: defaultDomain ? defaultDomain.name : null,
+      domains: verifiedDomains.map((d) => ({
+        name: d.name,
+        status: d.status,
+        isDefault: d.isDefault,
+        id: d.id,
+      })),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to fetch verified SendPulse domains:', error);
+    res.status(503).json({
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/**
+ * Check if a specific domain can send emails via SendPulse
+ * Query params: domain=example.com
+ */
+app.get('/api/sendpulse/domains/check', async (req: Request, res: Response) => {
+  try {
+    const { domain } = req.query;
+    
+    if (!domain || typeof domain !== 'string') {
+      return res.status(400).json({
+        error: 'Missing required query parameter: domain',
+      });
+    }
+
+    if (!process.env.SENDPULSE_API_KEY || !process.env.SENDPULSE_API_SECRET) {
+      return res.status(400).json({
+        error: 'SendPulse API credentials not configured',
+      });
+    }
+
+    const sendPulse = getSendPulseClient();
+    const canSend = await sendPulse.isMailableFromDomain(domain);
+
+    res.json({
+      domain,
+      canSend,
+      provider: 'sendpulse',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error(`Failed to check domain ${req.query.domain}:`, error);
+    res.status(503).json({
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 });
 
@@ -264,6 +424,42 @@ app.get('/api/services', (req: Request, res: Response) => {
 });
 
 /**
+ * List available templates
+ */
+app.get('/api/templates', (req: Request, res: Response) => {
+  try {
+    const templates = getAvailableTemplates();
+    res.json({
+      templates,
+      count: templates.length,
+    });
+  } catch (error) {
+    logger.error('Failed to list templates:', error);
+    res.status(500).json({
+      error: String(error),
+    });
+  }
+});
+
+/**
+ * Render a template with variables
+ */
+app.post('/api/templates/:name/render', (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const variables = req.body.variables || req.body;
+
+    const rendered = loadAndRenderTemplate(name as TemplateName, variables);
+    res.json(rendered);
+  } catch (error) {
+    logger.error('Template rendering failed:', error);
+    res.status(400).json({
+      error: String(error),
+    });
+  }
+});
+
+/**
  * Initialize and start server
  */
 async function startEmailService() {
@@ -271,6 +467,18 @@ async function startEmailService() {
     logger.info('╔════════════════════════════════════════════════════╗');
     logger.info('║       🚀 EMAIL SERVICE - Initializing              ║');
     logger.info('╚════════════════════════════════════════════════════╝');
+
+    // Initialize OS-level encryption first
+    try {
+      initializeEncryption();
+    } catch (encryptError) {
+      logger.error('Failed to initialize encryption:', encryptError);
+      logger.warn('Continuing without encryption - data will not be encrypted');
+    }
+
+    // Log available templates
+    const templates = getAvailableTemplates();
+    logger.info(`✓ Loaded ${templates.length} email templates:`, templates);
 
     const depsOk = await verifyDependencies();
     if (!depsOk) {

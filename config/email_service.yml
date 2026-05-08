@@ -42,7 +42,7 @@ branding:
 # =======================================
 domain:
   custom_domain: "httpsbuffcowland.in"
-  sender_email: "noreply@httpsbuffcowland.in"
+  sender_email: "official@httpsbuffcowland.in"
   
   # DKIM Configuration (optional)
   dkim:
@@ -143,7 +143,7 @@ logging:
   
   # Log files
   files:
-    enabled: false
+    enabled: true
     directory: "./logs"
     max_size: "10mb"
     max_files: 5

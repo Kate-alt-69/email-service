@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Confirmation - BuffCowLand</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 40px;
+        }
+        .greeting {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .order-id {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #004085;
+        }
+        .order-id strong {
+            color: #667eea;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 14px;
+            color: #666;
+        }
+        .detail-label {
+            font-weight: 500;
+        }
+        .detail-value {
+            text-align: right;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #667eea;
+            border-top: 2px solid #667eea;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .track-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 40px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .track-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #666;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            border-top: 1px solid #e9ecef;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🐄</div>
+            <h1>Order Confirmed!</h1>
+            <p>Thank you for your purchase</p>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hi {{USER_NAME}},
+            </div>
+            
+            <p style="font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 20px;">
+                Your order has been successfully placed and is being prepared for shipment.
+            </p>
+            
+            <div class="order-id">
+                📦 Order ID: <strong>{{ORDER_ID}}</strong>
+            </div>
+            
+            <div class="section-title">Order Details</div>
+            <div class="detail-row">
+                <span class="detail-label">Order Date:</span>
+                <span class="detail-value">{{ORDER_DATE}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Number of Items:</span>
+                <span class="detail-value">{{ITEM_COUNT}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Subtotal:</span>
+                <span class="detail-value">{{SUBTOTAL}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Shipping:</span>
+                <span class="detail-value">{{SHIPPING_COST}}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Tax:</span>
+                <span class="detail-value">{{TAX_AMOUNT}}</span>
+            </div>
+            <div class="total-row">
+                <span>Total Amount:</span>
+                <span>{{TOTAL_AMOUNT}}</span>
+            </div>
+            
+            <div class="section-title">Shipping Address</div>
+            <div style="font-size: 14px; color: #666; line-height: 1.8;">
+                {{CUSTOMER_NAME}}<br>
+                {{STREET_ADDRESS}}<br>
+                {{CITY}}, {{STATE}} {{ZIP_CODE}}<br>
+                {{COUNTRY}}
+            </div>
+            
+            <div class="button-container">
+                <a href="{{TRACK_URL}}" class="track-button">Track Your Order</a>
+            </div>
+            
+            <div class="info-box">
+                ℹ️ You'll receive a shipping notification with tracking details as soon as your order ships. Typically this happens within 1-2 business days.
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>© 2026 BuffCowLand. All rights reserved.</p>
+            <p><a href="{{WEBSITE_URL}}">Website</a> | <a href="{{SUPPORT_URL}}">Support</a> | <a href="{{RETURN_POLICY_URL}}">Returns</a></p>
+        </div>
+    </div>
+</body>
+</html>
