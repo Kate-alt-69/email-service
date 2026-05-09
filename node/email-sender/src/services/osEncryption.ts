@@ -86,7 +86,7 @@ class KeychainProvider implements EncryptionProvider {
   
   async encrypt(plaintext: string): Promise<string> {
     try {
-      const key = Buffer.randomBytes(32).toString('hex');
+      const key = crypto.randomBytes(32).toString('hex');
       const account = `email-service-key-${Date.now()}`;
       
       // Store the encryption key in Keychain

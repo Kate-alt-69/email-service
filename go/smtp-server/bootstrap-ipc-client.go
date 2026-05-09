@@ -72,10 +72,10 @@ func (c *BootstrapIPCClient) Connect(timeout time.Duration) error {
 			// Fall through to TCP conversion
 		}
 		// File path mode: use TCP fallback
-		endpoint = "localhost:9876"
+		endpoint = "localhost:9000"
 	} else if !isValidTCPEndpoint(endpoint) {
-		// Not a file path and not valid TCP, default to localhost:9876
-		endpoint = "localhost:9876"
+		// Not a file path and not valid TCP, default to localhost:9000
+		endpoint = "localhost:9000"
 	}
 	
 	// Connect via TCP
@@ -229,7 +229,7 @@ func WriteLoggerToFile(loggerCode string, outputPath string) error {
 
 // GetBootstrapIPCPath returns the TCP endpoint for Bootstrap Manager
 // Can be configured via BOOTSTRAP_IPC_PATH or BOOTSTRAP_TCP_ENDPOINT environment variables
-// Default: localhost:9876
+// Default: localhost:9000
 func GetBootstrapIPCPath() string {
 	// Check for TCP endpoint first
 	if endpoint := os.Getenv("BOOTSTRAP_TCP_ENDPOINT"); endpoint != "" {
@@ -242,5 +242,5 @@ func GetBootstrapIPCPath() string {
 	}
 
 	// Default TCP endpoint
-	return "localhost:9876"
+	return "localhost:9000"
 }

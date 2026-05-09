@@ -6,8 +6,8 @@
  * UAC (User Account Control) system for sending verification emails, OTPs, etc.
  */
 
-import { transporter } from './config/nodemailerConfig';
-import { loadAndRenderTemplate } from './services/templateEngine';
+import { getTransporter } from '../config/nodemailerConfig';
+import { loadAndRenderTemplate } from './templateEngine';
 import { v4 as uuidv4 } from 'uuid';
 
 // ─────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ export async function sendOTPEmail(
       PRIVACY_URL: process.env.PRIVACY_URL || 'https://buffcowland.in/privacy',
     });
 
-    const result = await transporter.sendMail({
+    const result = await getTransporter().sendMail({
       from: process.env.DEFAULT_FROM_EMAIL || 'official@httpsbuffcowland.in',
       to: userEmail,
       subject: `Your BuffCowLand OTP Code: ${otp}`,
@@ -72,7 +72,7 @@ export async function sendEmailVerificationEmail(
       PRIVACY_URL: process.env.PRIVACY_URL || 'https://buffcowland.in/privacy',
     });
 
-    const result = await transporter.sendMail({
+    const result = await getTransporter().sendMail({
       from: process.env.DEFAULT_FROM_EMAIL || 'official@httpsbuffcowland.in',
       to: userEmail,
       subject: 'Verify Your BuffCowLand Email Address',
@@ -110,7 +110,7 @@ export async function sendPasswordResetEmail(
       SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || 'support@httpsbuffcowland.in',
     });
 
-    const result = await transporter.sendMail({
+    const result = await getTransporter().sendMail({
       from: process.env.DEFAULT_FROM_EMAIL || 'official@httpsbuffcowland.in',
       to: userEmail,
       subject: 'Reset Your BuffCowLand Password',
@@ -143,7 +143,7 @@ export async function sendWelcomeEmail(
       SUPPORT_EMAIL: process.env.SUPPORT_EMAIL || 'support@httpsbuffcowland.in',
     });
 
-    const result = await transporter.sendMail({
+    const result = await getTransporter().sendMail({
       from: process.env.DEFAULT_FROM_EMAIL || 'official@httpsbuffcowland.in',
       to: userEmail,
       subject: 'Welcome to BuffCowLand! 🐄',
@@ -208,7 +208,7 @@ export async function sendOrderConfirmationEmail(
       RETURN_POLICY_URL: `${process.env.WEBSITE_URL || 'https://buffcowland.in'}/returns`,
     });
 
-    const result = await transporter.sendMail({
+    const result = await getTransporter().sendMail({
       from: process.env.DEFAULT_FROM_EMAIL || 'official@httpsbuffcowland.in',
       to: userEmail,
       subject: `Order Confirmation #${orderId} - BuffCowLand`,

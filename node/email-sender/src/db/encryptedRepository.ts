@@ -158,15 +158,15 @@ export class EncryptedEmailRepository implements EmailRepositoryLike {
       if (email.metadata) {
         try {
           if (
-            email.metadata.isEncrypted &&
-            email.metadata.encryptedMetadata
+            email.metadata!.isEncrypted &&
+            email.metadata!.encryptedMetadata
           ) {
-            const decrypted = await decryptObject(email.metadata.encryptedMetadata);
+            const decrypted = await decryptObject<Record<string, any>>(email.metadata!.encryptedMetadata);
             email.metadata = {
-              ...email.metadata,
+              ...(email.metadata! as any),
               ...decrypted,
             };
-            delete email.metadata.encryptedMetadata;
+            delete email.metadata!.encryptedMetadata;
           }
         } catch (error) {
           logger.warn(`Could not decrypt metadata for email ${emailId}:`, error);

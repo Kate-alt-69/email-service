@@ -60,10 +60,10 @@ func (c *BootstrapIPCClient) Connect(timeout time.Duration) error {
 	if envEndpoint := os.Getenv("BOOTSTRAP_TCP_ENDPOINT"); envEndpoint != "" {
 		return c.connectTCP(envEndpoint, timeout)
 	}
-	
+
 	// Determine if path is a file path or TCP endpoint
 	endpoint := c.path
-	
+
 	// Check if this looks like a Windows/Unix file path
 	if isFilePath(endpoint) {
 		// Try to use as IPC socket file first
@@ -72,12 +72,12 @@ func (c *BootstrapIPCClient) Connect(timeout time.Duration) error {
 			// Fall through to TCP conversion
 		}
 		// File path mode: use TCP fallback
-		endpoint = "localhost:9876"
+		endpoint = "localhost:9000"
 	} else if !isValidTCPEndpoint(endpoint) {
-		// Not a file path and not valid TCP, default to localhost:9876
-		endpoint = "localhost:9876"
+		// Not a file path and not valid TCP, default to localhost:9000
+		endpoint = "localhost:9000"
 	}
-	
+
 	// Connect via TCP
 	return c.connectTCP(endpoint, timeout)
 }
@@ -131,26 +131,26 @@ func isValidTCPEndpoint(path string) bool {
 	if colonCount != 1 {
 		return false
 	}
-	
+
 	parts := strings.Split(path, ":")
 	if len(parts) != 2 {
 		return false
 	}
-	
+
 	host := strings.TrimSpace(parts[0])
 	portStr := strings.TrimSpace(parts[1])
-	
+
 	// Host cant be empty
 	if host == "" {
 		return false
 	}
-	
+
 	// Port must be a valid number between 1-65535
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -229,18 +229,18 @@ func WriteLoggerToFile(loggerCode string, outputPath string) error {
 
 // GetBootstrapIPCPath returns the TCP endpoint for Bootstrap Manager
 // Can be configured via BOOTSTRAP_IPC_PATH or BOOTSTRAP_TCP_ENDPOINT environment variables
-// Default: localhost:9876
+// Default: localhost:9000
 func GetBootstrapIPCPath() string {
 	// Check for TCP endpoint first
 	if endpoint := os.Getenv("BOOTSTRAP_TCP_ENDPOINT"); endpoint != "" {
 		return endpoint
 	}
-	
+
 	// Check for legacy path (will be converted to TCP in Connect())
 	if ipcPath := os.Getenv("BOOTSTRAP_IPC_PATH"); ipcPath != "" {
 		return ipcPath
 	}
 
-	// Default TCP endpoint
-	return "localhost:9876"
+	// Default TCP endpoint aligned with Bootstrap Manager
+	return "localhost:9000"
 }
