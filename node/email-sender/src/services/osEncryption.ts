@@ -9,7 +9,7 @@
  */
 
 import * as crypto from 'crypto';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import * as os from 'os';
 import { getGlobalLogger } from '../logger';
 
@@ -30,22 +30,32 @@ interface EncryptionProvider {
  * Uses Windows Data Protection API via PowerShell
  */
 class WindowsDPAPIProvider implements EncryptionProvider {
+  private runPowerShell(script: string): string {
+    const encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
+
+    return execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedCommand],
+      {
+        encoding: 'utf-8',
+        timeout: 5000,
+      }
+    ).trim();
+  }
+
   async encrypt(plaintext: string): Promise<string> {
     try {
-      // Create a temporary PowerShell command to encrypt using DPAPI
       const base64Input = Buffer.from(plaintext, 'utf-8').toString('base64');
       
       const command = `
+        Add-Type -AssemblyName System.Security
         [System.Security.Cryptography.DataProtectionScope]$scope = 'CurrentUser'
         $bytes = [System.Convert]::FromBase64String('${base64Input}')
         $encrypted = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, $scope)
         [System.Convert]::ToBase64String($encrypted)
-      `.replace(/\n/g, '');
+      `;
       
-      const result = execSync(`powershell -Command "${command}"`, {
-        encoding: 'utf-8',
-        timeout: 5000,
-      }).trim();
+      const result = this.runPowerShell(command);
       
       return result;
     } catch (error) {
@@ -57,16 +67,14 @@ class WindowsDPAPIProvider implements EncryptionProvider {
   async decrypt(ciphertext: string): Promise<string> {
     try {
       const command = `
+        Add-Type -AssemblyName System.Security
         [System.Security.Cryptography.DataProtectionScope]$scope = 'CurrentUser'
         $encrypted = [System.Convert]::FromBase64String('${ciphertext}')
         $decrypted = [System.Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, $scope)
         [System.Convert]::ToBase64String($decrypted)
-      `.replace(/\n/g, '');
+      `;
       
-      const result = execSync(`powershell -Command "${command}"`, {
-        encoding: 'utf-8',
-        timeout: 5000,
-      }).trim();
+      const result = this.runPowerShell(command);
       
       const plaintext = Buffer.from(result, 'base64').toString('utf-8');
       return plaintext;

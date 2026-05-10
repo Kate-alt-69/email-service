@@ -8,17 +8,47 @@
  * 4. Both expose same interface (Logger class)
  */
 
-import { Logger, LoggerConfig, LogLevel, getGlobalLogger, setGlobalLogger } from './logger.dump';
+import * as localLogger from './logger.dump';
 
-export { Logger, LoggerConfig, LogLevel, getGlobalLogger, setGlobalLogger };
+export type Logger = localLogger.Logger;
+export type LoggerConfig = localLogger.LoggerConfig;
+
+type LoggerModule = typeof localLogger;
+
+function loadLoggerModule(): LoggerModule {
+  if (process.env.LOGGER_AVAILABLE === 'true' && process.env.LOGGER_PATH) {
+    try {
+      const injected = require(process.env.LOGGER_PATH) as Partial<LoggerModule>;
+      if (
+        injected.Logger &&
+        injected.LogLevel &&
+        injected.getGlobalLogger &&
+        injected.setGlobalLogger
+      ) {
+        return injected as LoggerModule;
+      }
+    } catch (error) {
+      process.stderr?.write(`Failed to load Bootstrap logger from ${process.env.LOGGER_PATH}: ${error}\n`);
+    }
+  }
+
+  return localLogger;
+}
+
+const activeLogger = loadLoggerModule();
+
+export const Logger = activeLogger.Logger;
+export const LogLevel = activeLogger.LogLevel;
+export const getGlobalLogger = activeLogger.getGlobalLogger;
+export const setGlobalLogger = activeLogger.setGlobalLogger;
 
 /**
  * Create or get logger instance
  * Called by services on startup
  */
 export function createLogger(config: LoggerConfig): Logger {
-  const logger = new Logger(config);
-  setGlobalLogger(logger);
+  const logger = new activeLogger.Logger(config);
+  activeLogger.setGlobalLogger(logger);
   return logger;
 }
 
@@ -48,4 +78,4 @@ export async function requestLoggerFromBootstrap(): Promise<LoggerConfig | null>
 }
 
 // Default export - the global logger instance
-export default getGlobalLogger();
+export default activeLogger.getGlobalLogger();

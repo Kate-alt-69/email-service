@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -17,25 +18,6 @@ func main() {
 	fmt.Println("║    🚀 Email Service - API Wrapper                  ║")
 	fmt.Println("╚════════════════════════════════════════════════════╝")
 
-	// Check if SMTP server is running
-	fmt.Println("🔍 Checking dependencies...")
-	smtpHost := os.Getenv("SMTP_HOST")
-	if smtpHost == "" {
-		smtpHost = "localhost"
-	}
-	smtpPort := os.Getenv("SMTP_PORT")
-	if smtpPort == "" {
-		smtpPort = "3425"
-	}
-
-	if !isServiceRunning(smtpHost, smtpPort, 30) {
-		fmt.Printf("❌ SMTP Server not running on %s:%s\n", smtpHost, smtpPort)
-		fmt.Println("❌ Email Service depends on SMTP Server!")
-		fmt.Println("Please start: email-smtp.exe first")
-		os.Exit(1)
-	}
-	fmt.Println("✓ SMTP Server dependency verified")
-
 	// Find the executable directory
 	exePath, err := os.Executable()
 	if err != nil {
@@ -44,6 +26,36 @@ func main() {
 	}
 
 	exeDir := filepath.Dir(exePath)
+
+	// Check if SMTP server is running. If it is local and missing, this wrapper
+	// can launch the sibling SMTP wrapper so the API binary is self-starting.
+	fmt.Println("🔍 Checking dependencies...")
+	smtpHost := getEnvDefault("SMTP_HOST", "localhost")
+	smtpPort := getEnvDefault("SMTP_PORT", "3425")
+	autoStartSMTP := strings.ToLower(os.Getenv("EMAIL_SERVICE_AUTO_START_SMTP")) != "false"
+	var smtpCmd *exec.Cmd
+
+	if !isServiceRunning(smtpHost, smtpPort, 1) {
+		if autoStartSMTP && isLocalhost(smtpHost) {
+			fmt.Printf("⚠️  SMTP Server not running on %s:%s; starting bundled SMTP wrapper...\n", smtpHost, smtpPort)
+			smtpCmd, err = startSMTPServer(exeDir, exePath, smtpPort)
+			if err != nil {
+				fmt.Printf("❌ Failed to start SMTP Server: %v\n", err)
+				fmt.Println("Please start: email-smtp.exe first, or set EMAIL_SERVICE_AUTO_START_SMTP=false")
+				os.Exit(1)
+			}
+		}
+
+		if !isServiceRunning(smtpHost, smtpPort, 30) {
+			fmt.Printf("❌ SMTP Server not running on %s:%s\n", smtpHost, smtpPort)
+			fmt.Println("❌ Email Service depends on SMTP Server!")
+			if smtpCmd != nil {
+				stopProcess(smtpCmd, "SMTP server")
+			}
+			os.Exit(1)
+		}
+	}
+	fmt.Println("✓ SMTP Server dependency verified")
 
 	// Look for email-service.js in order of preference:
 	// 1. ./dep/email-service.js (preferred - clean builds)
@@ -165,18 +177,26 @@ func main() {
 	go func() {
 		<-sigChan
 		fmt.Println("\n⚠️  Shutting down Email Service...")
-		if cmd.Process != nil {
-			cmd.Process.Signal(syscall.SIGINT)
+		stopProcess(cmd, "Email Service")
+		if smtpCmd != nil {
+			stopProcess(smtpCmd, "SMTP server")
 		}
 	}()
 
 	// Run and wait
 	if err := cmd.Run(); err != nil {
+		if smtpCmd != nil {
+			stopProcess(smtpCmd, "SMTP server")
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())
 		}
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if smtpCmd != nil {
+		stopProcess(smtpCmd, "SMTP server")
 	}
 }
 
@@ -194,6 +214,91 @@ func isServiceRunning(host, port string, maxRetries int) bool {
 		}
 	}
 	return false
+}
+
+func startSMTPServer(exeDir, exePath, smtpPort string) (*exec.Cmd, error) {
+	smtpBinary, err := findSMTPBinary(exeDir, exePath)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("📨 SMTP wrapper: %s\n", smtpBinary)
+	cmd := exec.Command(smtpBinary)
+	cmd.Dir = exeDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Env = smtpEnvironment(os.Environ(), smtpPort)
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("✓ SMTP wrapper started (PID: %d)\n", cmd.Process.Pid)
+	return cmd, nil
+}
+
+func findSMTPBinary(exeDir, exePath string) (string, error) {
+	if configured := os.Getenv("EMAIL_SMTP_BINARY"); configured != "" {
+		if !filepath.IsAbs(configured) {
+			configured = filepath.Join(exeDir, configured)
+		}
+		if _, err := os.Stat(configured); err == nil {
+			return configured, nil
+		}
+		return "", fmt.Errorf("EMAIL_SMTP_BINARY does not exist: %s", configured)
+	}
+
+	baseName := filepath.Base(exePath)
+	candidates := []string{}
+	if strings.Contains(baseName, "email-service") {
+		candidates = append(candidates, filepath.Join(exeDir, strings.Replace(baseName, "email-service", "email-smtp", 1)))
+	}
+	candidates = append(candidates,
+		filepath.Join(exeDir, "email-smtp-windows-amd64.exe"),
+		filepath.Join(exeDir, "email-smtp.exe"),
+		filepath.Join(exeDir, "email-smtp"),
+	)
+
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("cannot find SMTP wrapper next to email-service binary")
+}
+
+func smtpEnvironment(env []string, smtpPort string) []string {
+	if os.Getenv("SMTP_SERVER_PORT") == "" {
+		env = append(env, "SMTP_SERVER_PORT="+smtpPort)
+	}
+	if os.Getenv("EMAIL_SERVICE_SMTP_PORT") == "" {
+		env = append(env, "EMAIL_SERVICE_SMTP_PORT="+smtpPort)
+	}
+	return env
+}
+
+func stopProcess(cmd *exec.Cmd, name string) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+
+	if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+		_ = cmd.Process.Kill()
+	}
+	fmt.Printf("✓ Stop signal sent to %s\n", name)
+}
+
+func getEnvDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func isLocalhost(host string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(host))
+	return normalized == "" || normalized == "localhost" || normalized == "127.0.0.1" || normalized == "::1"
 }
 
 // Simple random ID generator

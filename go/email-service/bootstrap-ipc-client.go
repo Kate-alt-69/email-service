@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -13,8 +15,9 @@ import (
 
 // BootstrapIPCClient handles communication with Bootstrap Manager
 type BootstrapIPCClient struct {
-	conn net.Conn
-	path string
+	endpoint   string
+	httpClient *http.Client
+	path       string
 }
 
 // LoggerRequestPayload is sent to Bootstrap
@@ -50,20 +53,21 @@ type IPCMessage struct {
 // NewBootstrapIPCClient creates a new client for Bootstrap communication
 func NewBootstrapIPCClient(ipcPath string) *BootstrapIPCClient {
 	return &BootstrapIPCClient{
-		path: ipcPath,
+		path:       ipcPath,
+		httpClient: &http.Client{},
 	}
 }
 
-// Connect connects to Bootstrap Manager via TCP (localhost endpoint)
+// Connect connects to Bootstrap Manager via its HTTP API.
 func (c *BootstrapIPCClient) Connect(timeout time.Duration) error {
 	// Check environment variable override first
 	if envEndpoint := os.Getenv("BOOTSTRAP_TCP_ENDPOINT"); envEndpoint != "" {
-		return c.connectTCP(envEndpoint, timeout)
+		return c.connectHTTP(envEndpoint, timeout)
 	}
-	
+
 	// Determine if path is a file path or TCP endpoint
 	endpoint := c.path
-	
+
 	// Check if this looks like a Windows/Unix file path
 	if isFilePath(endpoint) {
 		// Try to use as IPC socket file first
@@ -77,19 +81,34 @@ func (c *BootstrapIPCClient) Connect(timeout time.Duration) error {
 		// Not a file path and not valid TCP, default to localhost:9000
 		endpoint = "localhost:9000"
 	}
-	
-	// Connect via TCP
-	return c.connectTCP(endpoint, timeout)
+
+	return c.connectHTTP(endpoint, timeout)
 }
 
-// connectTCP performs the actual TCP connection
-func (c *BootstrapIPCClient) connectTCP(endpoint string, timeout time.Duration) error {
-	conn, err := net.DialTimeout("tcp", endpoint, timeout)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Bootstrap at %s: %v", endpoint, err)
+// connectHTTP verifies the Bootstrap HTTP API is reachable.
+func (c *BootstrapIPCClient) connectHTTP(endpoint string, timeout time.Duration) error {
+	c.endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
+	c.httpClient.Timeout = timeout
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		resp, err := c.httpClient.Get("http://" + c.endpoint + "/api/health")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
+			}
+			lastErr = fmt.Errorf("bootstrap health check failed at %s: HTTP %d", c.endpoint, resp.StatusCode)
+		} else {
+			lastErr = fmt.Errorf("failed to connect to Bootstrap at %s: %v", c.endpoint, err)
+		}
+
+		if time.Now().After(deadline) {
+			return lastErr
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
-	c.conn = conn
-	return nil
 }
 
 // isFilePath checks if a string looks like a file path (Windows or Unix)
@@ -131,32 +150,32 @@ func isValidTCPEndpoint(path string) bool {
 	if colonCount != 1 {
 		return false
 	}
-	
+
 	parts := strings.Split(path, ":")
 	if len(parts) != 2 {
 		return false
 	}
-	
+
 	host := strings.TrimSpace(parts[0])
 	portStr := strings.TrimSpace(parts[1])
-	
+
 	// Host cant be empty
 	if host == "" {
 		return false
 	}
-	
+
 	// Port must be a valid number between 1-65535
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
 		return false
 	}
-	
+
 	return true
 }
 
 // RequestLogger asks Bootstrap for a compiled logger for the specified runtime
 func (c *BootstrapIPCClient) RequestLogger(serviceName string, runtime string, permissions []string) (*LoggerResponsePayload, string, error) {
-	if c.conn == nil {
+	if c.endpoint == "" {
 		return nil, "", fmt.Errorf("not connected to Bootstrap")
 	}
 
@@ -185,20 +204,26 @@ func (c *BootstrapIPCClient) RequestLogger(serviceName string, runtime string, p
 		return nil, "", fmt.Errorf("failed to marshal IPC message: %v", err)
 	}
 
-	// Send request
-	if _, err := c.conn.Write(msgBytes); err != nil {
+	respHTTP, err := c.httpClient.Post(
+		"http://"+c.endpoint+"/logger/request",
+		"application/json",
+		bytes.NewReader(msgBytes),
+	)
+	if err != nil {
 		return nil, "", fmt.Errorf("failed to send logger request: %v", err)
 	}
+	defer respHTTP.Body.Close()
 
-	// Read response
-	buf := make([]byte, 1024*1024) // 1MB buffer for logger code
-	n, err := c.conn.Read(buf)
+	respBytes, err := io.ReadAll(respHTTP.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read logger response: %v", err)
 	}
+	if respHTTP.StatusCode < 200 || respHTTP.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("logger request failed: HTTP %d: %s", respHTTP.StatusCode, strings.TrimSpace(string(respBytes)))
+	}
 
 	var respMsg IPCMessage
-	if err := json.Unmarshal(buf[:n], &respMsg); err != nil {
+	if err := json.Unmarshal(respBytes, &respMsg); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
@@ -216,9 +241,6 @@ func (c *BootstrapIPCClient) RequestLogger(serviceName string, runtime string, p
 
 // Close closes the IPC connection
 func (c *BootstrapIPCClient) Close() error {
-	if c.conn != nil {
-		return c.conn.Close()
-	}
 	return nil
 }
 
@@ -235,7 +257,7 @@ func GetBootstrapIPCPath() string {
 	if endpoint := os.Getenv("BOOTSTRAP_TCP_ENDPOINT"); endpoint != "" {
 		return endpoint
 	}
-	
+
 	// Check for legacy path (will be converted to TCP in Connect())
 	if ipcPath := os.Getenv("BOOTSTRAP_IPC_PATH"); ipcPath != "" {
 		return ipcPath
